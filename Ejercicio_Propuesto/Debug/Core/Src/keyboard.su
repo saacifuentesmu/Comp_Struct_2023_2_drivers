@@ -1,0 +1,2 @@
+../Core/Src/keyboard.c:10:6:keyboard_init	4	static
+../Core/Src/keyboard.c:24:10:keyboard_handler	24	static
