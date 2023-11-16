@@ -114,13 +114,16 @@ void validate_sequence(void)
 	for (uint8_t idx = 0; idx < 5; idx++) {
 	  ring_buffer_get(&ring_buffer_keypad, &sequence[idx]);
 	}
+	char *result_log;
 	if (memcmp(birth_date, sequence, 5) == 0) {
-	  ssd1306_SetCursor(20, 20);
-	  ssd1306_WriteString("Pass", Font_16x26, White);
+	  result_log = "Pass";
 	} else {
-	  ssd1306_SetCursor(20, 20);
-	  ssd1306_WriteString("Fail", Font_16x26, White);
+	  result_log = "Fail";
 	}
+	printf("Sequence result: %s\r\n", result_log);
+
+	ssd1306_SetCursor(20, 20);
+	ssd1306_WriteString(result_log, Font_16x26, White);
 	ssd1306_UpdateScreen();
 }
 /* USER CODE END 0 */
@@ -165,6 +168,8 @@ int main(void)
   ssd1306_Init();
   ssd1306_Fill(Black);
   ssd1306_SetCursor(20, 20);
+  ssd1306_WriteString("Wait", Font_16x26, White);
+  ssd1306_UpdateScreen();
 
   keypad_init(); // Initialize the keypad functionality
 
@@ -172,6 +177,7 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  printf("Waiting sequence...\r\n");
   while (1)
   {
 	  if (key_event != 0xFF) { // check if there is a event from the EXTi callback
