@@ -51,14 +51,11 @@
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
 
-UART_HandleTypeDef huart2;
-
 /* USER CODE BEGIN PV */
 ring_buffer_t ring_buffer_uart_rx;
 uint8_t rx_buffer[16];
-uint8_t rx_data;
 
-uint16_t key_event = 0xFF;
+volatile uint16_t key_event = 0xFF; // this var shall be volatile so the compiler does not remove it
 
 ring_buffer_t ring_buffer_keypad;
 uint8_t keypad_buffer[5];
@@ -78,7 +75,13 @@ static void MX_I2C1_Init(void);
 
 int _write(int file, char *ptr, int len)
 {
-  HAL_UART_Transmit(&huart2, (uint8_t *)ptr, len, HAL_MAX_DELAY);
+  for (uint8_t idx = 0; idx < len; idx++) {
+	  // send byte by byte in blocking mode
+	  while (LL_USART_IsActiveFlag_TXE(USART2) == 0) {
+		  // wait until Tx Empty flag becomes true
+	  }
+	  LL_USART_TransmitData8(USART2, ptr[idx]);
+  }
   return len;
 }
 /**
@@ -86,13 +89,10 @@ int _write(int file, char *ptr, int len)
   * @param  huart UART handle.
   * @retval None
   */
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+void Custom_USART2_RxCallback(void)
 {
-	if (ring_buffer_put(&ring_buffer_uart_rx, rx_data) == 0) {
-		printf("Rx buffer is full\r\n");
-	}
-
-	HAL_UART_Receive_IT(&huart2, &rx_data, 1);
+	uint8_t rx_data = LL_USART_ReceiveData8(USART2);
+	ring_buffer_put(&ring_buffer_uart_rx, rx_data);
 }
 
 /**
@@ -162,7 +162,7 @@ int main(void)
   ring_buffer_init(&ring_buffer_uart_rx, rx_buffer, 16);
   ring_buffer_init(&ring_buffer_keypad, keypad_buffer, 5);
 
-  HAL_UART_Receive_IT(&huart2, &rx_data, 1);
+  LL_USART_EnableIT_RXNE(USART2);
 
 
   ssd1306_Init();
@@ -310,23 +310,53 @@ static void MX_USART2_UART_Init(void)
 
   /* USER CODE END USART2_Init 0 */
 
-  /* USER CODE BEGIN USART2_Init 1 */
+  LL_USART_InitTypeDef USART_InitStruct = {0};
 
-  /* USER CODE END USART2_Init 1 */
-  huart2.Instance = USART2;
-  huart2.Init.BaudRate = 115200;
-  huart2.Init.WordLength = UART_WORDLENGTH_8B;
-  huart2.Init.StopBits = UART_STOPBITS_1;
-  huart2.Init.Parity = UART_PARITY_NONE;
-  huart2.Init.Mode = UART_MODE_TX_RX;
-  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-  huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-  huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  if (HAL_UART_Init(&huart2) != HAL_OK)
+  LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+
+  /** Initializes the peripherals clock
+  */
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART2;
+  PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
   }
+
+  /* Peripheral clock enable */
+  LL_APB1_GRP1_EnableClock(LL_APB1_GRP1_PERIPH_USART2);
+
+  LL_AHB2_GRP1_EnableClock(LL_AHB2_GRP1_PERIPH_GPIOA);
+  /**USART2 GPIO Configuration
+  PA2   ------> USART2_TX
+  PA3   ------> USART2_RX
+  */
+  GPIO_InitStruct.Pin = LL_GPIO_PIN_2|LL_GPIO_PIN_3;
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
+  GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
+  GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+  GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+  GPIO_InitStruct.Alternate = LL_GPIO_AF_7;
+  LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* USART2 interrupt Init */
+  NVIC_SetPriority(USART2_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),0, 0));
+  NVIC_EnableIRQ(USART2_IRQn);
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  USART_InitStruct.BaudRate = 115200;
+  USART_InitStruct.DataWidth = LL_USART_DATAWIDTH_8B;
+  USART_InitStruct.StopBits = LL_USART_STOPBITS_1;
+  USART_InitStruct.Parity = LL_USART_PARITY_NONE;
+  USART_InitStruct.TransferDirection = LL_USART_DIRECTION_TX_RX;
+  USART_InitStruct.HardwareFlowControl = LL_USART_HWCONTROL_NONE;
+  USART_InitStruct.OverSampling = LL_USART_OVERSAMPLING_16;
+  LL_USART_Init(USART2, &USART_InitStruct);
+  LL_USART_ConfigAsyncMode(USART2);
+  LL_USART_Enable(USART2);
   /* USER CODE BEGIN USART2_Init 2 */
 
   /* USER CODE END USART2_Init 2 */
