@@ -52,13 +52,15 @@
 I2C_HandleTypeDef hi2c1;
 
 /* USER CODE BEGIN PV */
-ring_buffer_t ring_buffer_uart_rx;
-uint8_t rx_buffer[16];
+ring_buffer_t ring_buffer_rx_usart1; 	// control vars for the ring buffer
+uint8_t rx_buffer_usart1[16]; 			// memory for ring buffer
+
+ring_buffer_t ring_buffer_tx_usart1; 	// control vars for the ring buffer
+uint8_t tx_buffer_usart1[16]; 			// memory for ring buffer
 
 volatile uint16_t key_event = 0xFF; // this var shall be volatile so the compiler does not remove it
-
-ring_buffer_t ring_buffer_keypad;
-uint8_t keypad_buffer[5];
+ring_buffer_t ring_buffer_keypad; 	// control vars for the ring buffer
+uint8_t keypad_buffer[5];  			// memory for ring buffer
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -66,6 +68,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -75,24 +78,45 @@ static void MX_I2C1_Init(void);
 
 int _write(int file, char *ptr, int len)
 {
-  for (uint8_t idx = 0; idx < len; idx++) {
-	  // send byte by byte in blocking mode
-	  while (LL_USART_IsActiveFlag_TXE(USART2) == 0) {
-		  // wait until Tx Empty flag becomes true
-	  }
-	  LL_USART_TransmitData8(USART2, ptr[idx]);
-  }
+//  for (uint8_t idx = 0; idx < len; idx++) {
+//	  // send byte by byte in blocking mode
+//	  while (LL_USART_IsActiveFlag_TXE(USART2) == 0) {
+//		  // wait until Tx Empty flag becomes true
+//	  }
+//	  LL_USART_TransmitData8(USART2, ptr[idx]);
+//  }
   return len;
 }
+
 /**
   * @brief  Rx Transfer completed callback.
   * @param  huart UART handle.
   * @retval None
   */
-void Custom_USART2_RxCallback(void)
+void Custom_USART1_RxCallback(uint8_t rx_data)
 {
-	uint8_t rx_data = LL_USART_ReceiveData8(USART2);
-	ring_buffer_put(&ring_buffer_uart_rx, rx_data);
+	LL_USART_TransmitData8(USART2, rx_data);
+	//ring_buffer_put(&ring_buffer_rx_usart1, rx_data);
+}
+
+uint8_t Custom_USART1_TxCallback(uint8_t *tx_data)
+{
+	return 0; // Tx not implemented by IT for usart1
+}
+
+/**
+  * @brief  Rx Transfer completed callback.
+  * @param  huart UART handle.
+  * @retval None
+  */
+void Custom_USART2_RxCallback(uint8_t rx_data)
+{
+	LL_USART_TransmitData8(USART1, rx_data);
+}
+
+uint8_t Custom_USART2_TxCallback(uint8_t *tx_data)
+{
+	return 0; // Tx not implemented by IT in usart2
 }
 
 /**
@@ -158,10 +182,13 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_I2C1_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  ring_buffer_init(&ring_buffer_uart_rx, rx_buffer, 16);
+  ring_buffer_init(&ring_buffer_rx_usart1, rx_buffer_usart1, 16);
+  ring_buffer_init(&ring_buffer_tx_usart1, tx_buffer_usart1, 16);
   ring_buffer_init(&ring_buffer_keypad, keypad_buffer, 5);
 
+  LL_USART_EnableIT_RXNE(USART1);
   LL_USART_EnableIT_RXNE(USART2);
 
 
@@ -295,6 +322,71 @@ static void MX_I2C1_Init(void)
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  LL_USART_InitTypeDef USART_InitStruct = {0};
+
+  LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+
+  /** Initializes the peripherals clock
+  */
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART1;
+  PeriphClkInit.Usart1ClockSelection = RCC_USART1CLKSOURCE_PCLK2;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /* Peripheral clock enable */
+  LL_APB2_GRP1_EnableClock(LL_APB2_GRP1_PERIPH_USART1);
+
+  LL_AHB2_GRP1_EnableClock(LL_AHB2_GRP1_PERIPH_GPIOB);
+  /**USART1 GPIO Configuration
+  PB6   ------> USART1_TX
+  PB7   ------> USART1_RX
+  */
+  GPIO_InitStruct.Pin = LL_GPIO_PIN_6|LL_GPIO_PIN_7;
+  GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
+  GPIO_InitStruct.Speed = LL_GPIO_SPEED_FREQ_VERY_HIGH;
+  GPIO_InitStruct.OutputType = LL_GPIO_OUTPUT_PUSHPULL;
+  GPIO_InitStruct.Pull = LL_GPIO_PULL_NO;
+  GPIO_InitStruct.Alternate = LL_GPIO_AF_7;
+  LL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /* USART1 interrupt Init */
+  NVIC_SetPriority(USART1_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),0, 0));
+  NVIC_EnableIRQ(USART1_IRQn);
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  USART_InitStruct.BaudRate = 115200;
+  USART_InitStruct.DataWidth = LL_USART_DATAWIDTH_8B;
+  USART_InitStruct.StopBits = LL_USART_STOPBITS_1;
+  USART_InitStruct.Parity = LL_USART_PARITY_NONE;
+  USART_InitStruct.TransferDirection = LL_USART_DIRECTION_TX_RX;
+  USART_InitStruct.HardwareFlowControl = LL_USART_HWCONTROL_NONE;
+  USART_InitStruct.OverSampling = LL_USART_OVERSAMPLING_16;
+  LL_USART_Init(USART1, &USART_InitStruct);
+  LL_USART_ConfigAsyncMode(USART1);
+  LL_USART_Enable(USART1);
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
 
 }
 

@@ -46,7 +46,11 @@
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
-void Custom_USART2_RxCallback(void);
+void Custom_USART1_RxCallback(uint8_t rx_data);
+uint8_t Custom_USART1_TxCallback(uint8_t *tx_data);
+
+void Custom_USART2_RxCallback(uint8_t rx_data);
+uint8_t Custom_USART2_TxCallback(uint8_t *tx_data);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -215,12 +219,56 @@ void EXTI9_5_IRQHandler(void)
 }
 
 /**
+  * @brief This function handles USART1 global interrupt.
+  */
+void USART1_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART1_IRQn 0 */
+	if (LL_USART_IsActiveFlag_RXNE(USART1) != 0) { // if Rx not empty event
+		uint8_t rx_data = LL_USART_ReceiveData8(USART1);
+		if (LL_USART_IsEnabledIT_RXNE(USART1) != 0) { // if Rx IT enabled
+			Custom_USART1_RxCallback(rx_data);
+		}
+	}
+
+	if (LL_USART_IsActiveFlag_TXE(USART1) != 0) { // if Tx empty event
+
+		if (LL_USART_IsEnabledIT_TXE(USART1) != 0) { // if Tx IT enabled
+			uint8_t tx_data;
+			if (Custom_USART1_TxCallback(&tx_data)) { // if there are more bytes to send
+				LL_USART_TransmitData8(USART1, tx_data);
+			}
+		}
+	}
+  /* USER CODE END USART1_IRQn 0 */
+  /* USER CODE BEGIN USART1_IRQn 1 */
+
+  /* USER CODE END USART1_IRQn 1 */
+}
+
+/**
   * @brief This function handles USART2 global interrupt.
   */
 void USART2_IRQHandler(void)
 {
   /* USER CODE BEGIN USART2_IRQn 0 */
-	Custom_USART2_RxCallback();
+	if (LL_USART_IsActiveFlag_RXNE(USART2) != 0) { // if Rx not empty event
+		uint8_t rx_data = LL_USART_ReceiveData8(USART2);
+		if (LL_USART_IsEnabledIT_RXNE(USART2) != 0) { // if Rx IT enabled
+			Custom_USART2_RxCallback(rx_data);
+		}
+	}
+
+	if (LL_USART_IsActiveFlag_TXE(USART2) != 0) { // if Tx empty event
+
+		if (LL_USART_IsEnabledIT_TXE(USART2) != 0) { // if Tx IT enabled
+			uint8_t tx_data;
+			if (Custom_USART2_TxCallback(&tx_data)) { // if there are more bytes to send
+				LL_USART_TransmitData8(USART2, tx_data);
+			}
+		}
+	}
+
   /* USER CODE END USART2_IRQn 0 */
   /* USER CODE BEGIN USART2_IRQn 1 */
 
